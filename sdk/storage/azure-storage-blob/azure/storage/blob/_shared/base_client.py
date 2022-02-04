@@ -37,7 +37,7 @@ from azure.core.pipeline.policies import (
 
 from .constants import STORAGE_OAUTH_SCOPE, SERVICE_HOST_BASE, CONNECTION_TIMEOUT, READ_TIMEOUT
 from .models import LocationMode
-from .authentication import SharedKeyCredentialPolicy
+from .authentication import (NoAuthenticationHeaderPolicy, SharedKeyCredentialPolicy)
 from .shared_access_signature import QueryStringConstants
 from .request_handlers import serialize_batch_body, _get_batch_request_delimiter
 from .policies import (
@@ -79,14 +79,24 @@ class StorageAccountHostsMixin(object):  # pylint: disable=too-many-instance-att
         if service not in ["blob", "queue", "file-share", "dfs"]:
             raise ValueError("Invalid service: {}".format(service))
         service_name = service.split('-')[0]
-        account = parsed_url.netloc.split(".{}.core.".format(service_name))
 
-        self.account_name = account[0] if len(account) > 1 else None
+        if 'azurewebsites.net' in parsed_url.netloc:
+            account = parsed_url.netloc.split('.')
+            self.account_name = account[0]
+        else:
+            account = parsed_url.netloc.split(".{}.core.".format(service_name))
+            self.account_name = account[0] if len(account) > 1 else None
+
+        
         if not self.account_name and parsed_url.netloc.startswith("localhost") \
                 or parsed_url.netloc.startswith("127.0.0.1"):
             self.account_name = parsed_url.path.strip("/")
 
-        self.credential = _format_shared_key_credential(self.account_name, credential)
+        if 'azurewebsites.net' in parsed_url.netloc:
+            self.credential = NoAuthenticationHeaderPolicy() 
+        else:
+            self.credential = _format_shared_key_credential(self.account_name, credential)
+
         if self.scheme.lower() != "https" and hasattr(self.credential, "get_token"):
             raise ValueError("Token credential is only supported with HTTPS.")
 
@@ -220,6 +230,8 @@ class StorageAccountHostsMixin(object):  # pylint: disable=too-many-instance-att
         self._credential_policy = None
         if hasattr(credential, "get_token"):
             self._credential_policy = BearerTokenCredentialPolicy(credential, STORAGE_OAUTH_SCOPE)
+        elif isinstance(credential, NoAuthenticationHeaderPolicy):
+            pass
         elif isinstance(credential, SharedKeyCredentialPolicy):
             self._credential_policy = credential
         elif isinstance(credential, AzureSasCredential):

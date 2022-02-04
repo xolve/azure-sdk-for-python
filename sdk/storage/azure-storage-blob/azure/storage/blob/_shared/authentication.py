@@ -55,6 +55,10 @@ class AzureSigningError(ClientAuthenticationError):
     Please visit https://docs.microsoft.com/en-us/azure/storage/common/storage-create-storage-account for more info.
     """
 
+class NoAuthenticationHeaderPolicy(SansIOHTTPPolicy):
+
+    def __init__(self):
+        super(NoAuthenticationHeaderPolicy, self).__init__()
 
 # pylint: disable=no-self-use
 class SharedKeyCredentialPolicy(SansIOHTTPPolicy):
